@@ -1,0 +1,11 @@
+# Distributed Processing & Data Manipulation
+pyspark==3.5.1
+pandas>=2.2.2
+numpy>=1.26.4
+
+# Streaming and Ingestion
+kafka-python>=2.0.2
+
+# DevOps & Testing
+pytest>=8.1.1
+docker>=7.0.0
