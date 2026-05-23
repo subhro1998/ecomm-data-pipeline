@@ -6,8 +6,12 @@ volumes:
     name: ecomm-postgres-data
   mongodb_data:
     name: ecomm-mongodb-data
+  mongodb_configdb_data:
+    name: ecomm-mongodb-configdb-data
   airflow_postgres_data:
     name: ecomm-airflow-postgres-data
+  airflow_data:
+    name: ecomm-airflow-data
 
 services:
   # minio set up for object / file storage
@@ -64,7 +68,7 @@ services:
     container_name: postgres
     restart: unless-stopped
     ports:
-      - "5436:5436"
+      - "5436:5432"
     environment:
       POSTGRES_DB: ecommerce
       POSTGRES_USER: db_user
@@ -72,7 +76,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres -d ecommerce" ]
+      test: [ "CMD-SHELL", "pg_isready -U db_user -d ecommerce" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -89,6 +93,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ImS0Advanced!
     volumes:
       - mongodb_data:/data/db
+      - mongodb_configdb_data:/data/configdb
     healthcheck:
       test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
       interval: 15s
@@ -132,15 +137,15 @@ services:
     container_name: airflow-postgres
     restart: unless-stopped
     ports:
-      - "5433:5433"
+      - "5433:5432"
     environment:
-      POSTGRES_USER: airflow_admin
+      POSTGRES_USER: airflow_db_admin
       POSTGRES_PASSWORD: ImS0Advanced!
-      POSTGRES_DB: airflow-postgres
+      POSTGRES_DB: airflowPgDB
     volumes:
       - airflow_postgres_data:/var/lib/postgresql
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U airflow -d airflow" ]
+      test: [ "CMD-SHELL", "pg_isready -U airflow_db_admin -d airflowPgDB" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -149,18 +154,18 @@ services:
   airflow-init:
     image: apache/airflow:2.10.5
     container_name: airflow-init
-    profiles: [ "init" ]
+    #profiles: [ "init" ]
     depends_on:
       airflow-postgres:
         condition: service_healthy
     user: "${AIRFLOW_UID:-50000}:0"
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow_admin:ImS0Advanced!@airflow-postgres/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow_db_admin:ImS0Advanced!@airflow-postgres/airflowPgDB
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__WEBSERVER__SECRET_KEY: airflow-secret-key
     entrypoint: /bin/bash
-    command: -c "airflow db migrate && airflow users create --username airflow --password airflow --firstname Airflow --lastname Admin --role Admin --email airflow.practice.subhpanja98@gmail.com"
+    command: -c "airflow db init && airflow users create --username airflow-admin --password airflow_admin --firstname Airflow --lastname Admin --role Admin --email airflow.practice.subhpanja98@gmail.com"
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
@@ -175,10 +180,12 @@ services:
     depends_on:
       airflow-postgres:
         condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
     user: "${AIRFLOW_UID:-50000}:0"
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow_admin:ImS0Advanced!@airflow-postgres/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow_db_admin:ImS0Advanced!@airflow-postgres/airflowPgDB
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__WEBSERVER__SECRET_KEY: airflow-secret-key
     command: webserver
@@ -198,15 +205,17 @@ services:
     depends_on:
       airflow-postgres:
         condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
     user: "${AIRFLOW_UID:-50000}:0"
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow_db_admin:ImS0Advanced!@airflow-postgres/airflowPgDB
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__WEBSERVER__SECRET_KEY: airflow-secret-key
     command: scheduler
     volumes:
-      - ./airflow/dags:/opt/airflow/dags
-      - ./airflow/logs:/opt/airflow/logs
-      - ./airflow/plugins:/opt/airflow/plugins
-      - ./airflow/config:/opt/airflow/config
+      - airflow_data:/opt/airflow/dags
+      - airflow_data:/opt/airflow/logs
+      - airflow_data:/opt/airflow/plugins
+      - airflow_data:/opt/airflow/config
