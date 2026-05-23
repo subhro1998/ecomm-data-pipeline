@@ -1,4 +1,4 @@
-name: ecomm-data-engg-setup
+name: ecom-data-engg
 volumes:
   minio_data:
     name: ecomm-data-storage-minio
@@ -6,12 +6,18 @@ volumes:
     name: ecomm-postgres-data
   mongodb_data:
     name: ecomm-mongodb-data
-  mongodb_configdb_data:
-    name: ecomm-mongodb-configdb-data
+  mongodb_config_data:
+    name: ecomm-mongodb-config-data
   airflow_postgres_data:
     name: ecomm-airflow-postgres-data
-  airflow_data:
-    name: ecomm-airflow-data
+  airflow_dags:
+    name: ecomm-airflow-dags
+  airflow_logs:
+    name: ecomm-airflow-logs
+  airflow_plugins:
+    name: ecomm-airflow-plugins
+  airflow_config:
+    name: ecomm-airflow-config
 
 services:
   # minio set up for object / file storage
@@ -41,7 +47,8 @@ services:
     profiles: [ "init" ]
     image: quay.io/minio/mc:latest
     depends_on:
-      - minio
+      minio:
+        condition: service_healthy
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin1!
@@ -54,11 +61,11 @@ services:
       done;
       /usr/bin/mc mb --ignore-existing ecomm-data-pipeline/raw;
       /usr/bin/mc mb --ignore-existing ecomm-data-pipeline/cleansed;
-      /usr/bin/mc mb --ignore-existing ecomm-data-pipeline/processed;
+      /usr/bin/mc mb --ignore-existing ecomm-data-pipeline/completed;
       echo 'placeholder' | /usr/bin/mc pipe ecomm-data-pipeline/raw/bronze/.keep;
       echo 'placeholder' | /usr/bin/mc pipe ecomm-data-pipeline/cleansed/silver/.keep;
-      echo 'placeholder' | /usr/bin/mc pipe ecomm-data-pipeline/processed/bronze/.keep;
-      echo 'placeholder' | /usr/bin/mc pipe ecomm-data-pipeline/processed/silver/.keep;
+      echo 'placeholder' | /usr/bin/mc pipe ecomm-data-pipeline/completed/bronze/.keep;
+      echo 'placeholder' | /usr/bin/mc pipe ecomm-data-pipeline/completed/silver/.keep;
       echo 'MinIO buckets and prefixes created.';
       "
 
@@ -93,7 +100,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ImS0Advanced!
     volumes:
       - mongodb_data:/data/db
-      - mongodb_configdb_data:/data/configdb
+      - mongodb_config_data:/data/configdb
     healthcheck:
       test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
       interval: 15s
@@ -150,11 +157,11 @@ services:
       timeout: 5s
       retries: 5
 
-  # One-time Airflow initialization
-  airflow-init:
+  # Airflow initialization and webserver set up
+  airflow-webserver:
     image: apache/airflow:2.10.5
-    container_name: airflow-init
-    #profiles: [ "init" ]
+    container_name: airflow-webserver
+    restart: unless-stopped
     depends_on:
       airflow-postgres:
         condition: service_healthy
@@ -165,37 +172,29 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__WEBSERVER__SECRET_KEY: airflow-secret-key
     entrypoint: /bin/bash
-    command: -c "airflow db init && airflow users create --username airflow-admin --password airflow_admin --firstname Airflow --lastname Admin --role Admin --email airflow.practice.subhpanja98@gmail.com"
-    volumes:
-      - ./airflow/dags:/opt/airflow/dags
-      - ./airflow/logs:/opt/airflow/logs
-      - ./airflow/plugins:/opt/airflow/plugins
-      - ./airflow/config:/opt/airflow/config
-
-  # Airflow webserver
-  airflow-webserver:
-    image: apache/airflow:2.10.5
-    container_name: airflow-webserver
-    restart: unless-stopped
-    depends_on:
-      airflow-postgres:
-        condition: service_healthy
-      airflow-init:
-        condition: service_completed_successfully
-    user: "${AIRFLOW_UID:-50000}:0"
-    environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow_db_admin:ImS0Advanced!@airflow-postgres/airflowPgDB
-      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-      AIRFLOW__WEBSERVER__SECRET_KEY: airflow-secret-key
-    command: webserver
+    command: >-
+      -c "airflow db migrate &&
+      (airflow users create
+        --username airflow_admin
+        --password airflow_admin
+        --firstname Airflow
+        --lastname Admin
+        --role Admin
+        --email airflow.practice.subhpanja98@gmail.com || true) &&
+      airflow webserver"
     ports:
       - "8080:8080"
     volumes:
-      - ./airflow/dags:/opt/airflow/dags
-      - ./airflow/logs:/opt/airflow/logs
-      - ./airflow/plugins:/opt/airflow/plugins
-      - ./airflow/config:/opt/airflow/config
+      - airflow_dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+      - airflow_plugins:/opt/airflow/plugins
+      - airflow_config:/opt/airflow/config
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
   # Airflow scheduler
   airflow-scheduler:
@@ -205,8 +204,8 @@ services:
     depends_on:
       airflow-postgres:
         condition: service_healthy
-      airflow-init:
-        condition: service_completed_successfully
+      airflow-webserver:
+        condition: service_healthy
     user: "${AIRFLOW_UID:-50000}:0"
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -215,7 +214,7 @@ services:
       AIRFLOW__WEBSERVER__SECRET_KEY: airflow-secret-key
     command: scheduler
     volumes:
-      - airflow_data:/opt/airflow/dags
-      - airflow_data:/opt/airflow/logs
-      - airflow_data:/opt/airflow/plugins
-      - airflow_data:/opt/airflow/config
+      - airflow_dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+      - airflow_plugins:/opt/airflow/plugins
+      - airflow_config:/opt/airflow/config
