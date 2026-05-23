@@ -1,5 +1,3 @@
-version: "3.9"
-
 name: ecomm-data-engg-setup
 volumes:
   minio_data:
@@ -72,7 +70,7 @@ services:
       POSTGRES_USER: db_user
       POSTGRES_PASSWORD: ImS0Advanced!
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres -d ecommerce" ]
       interval: 10s
@@ -140,7 +138,7 @@ services:
       POSTGRES_PASSWORD: ImS0Advanced!
       POSTGRES_DB: airflow-postgres
     volumes:
-      - airflow_postgres_data:/var/lib/postgresql/data
+      - airflow_postgres_data:/var/lib/postgresql
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U airflow -d airflow" ]
       interval: 10s
@@ -158,7 +156,7 @@ services:
     user: "${AIRFLOW_UID:-50000}:0"
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow_admin:ImS0Advanced!@airflow-postgres/airflow
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__WEBSERVER__SECRET_KEY: airflow-secret-key
     entrypoint: /bin/bash
@@ -180,7 +178,7 @@ services:
     user: "${AIRFLOW_UID:-50000}:0"
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow_admin:ImS0Advanced!@airflow-postgres/airflow
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__WEBSERVER__SECRET_KEY: airflow-secret-key
     command: webserver
