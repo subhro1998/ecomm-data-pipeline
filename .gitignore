@@ -2,4 +2,7 @@
 *.log
 
 # Ignore airflow directory inside docker directory
-docker/airflow/
+deployment/docker/airflow/
+
+# Ignore venv folder
+venv

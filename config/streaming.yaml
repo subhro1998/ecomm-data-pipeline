@@ -1,0 +1,19 @@
+ecommerce:
+  data-pipeline:
+    topic:
+      orders:
+        placed: order-placed-raw
+        returned: order-return-raw
+        cancelled: order-cancel-raw
+
+      payment:
+        initiated: payment-initiated-raw
+        successful: payment-successful-raw
+        failure: payment-failed-raw
+
+      refund:
+        initiated: refund-initiated-raw
+        successful: refund-successful-raw
+        failed: refund-failed-raw
+
+      inventory: inventory-updates-raw

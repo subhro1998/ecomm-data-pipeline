@@ -3,6 +3,9 @@ pyspark==3.5.1
 pandas>=2.2.2
 numpy>=1.26.4
 
+# File system
+PyYAML>=6.0.3
+
 # Streaming and Ingestion
 kafka-python>=2.0.2
 
